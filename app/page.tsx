@@ -104,15 +104,26 @@ export default function Calendar() {
     finally { saving.current = false; setBusy(false); }
   }
   async function login(e: React.FormEvent) {
-    e.preventDefault(); setBusy(true); setError('');
+    e.preventDefault(); if (busy) return;
+    const fields = new FormData(e.currentTarget as HTMLFormElement);
+    setBusy(true); setError('');
     try {
-      const {error} = await supabase!.auth.signInWithOtp({email:email.trim(),options:{shouldCreateUser:true,emailRedirectTo:window.location.origin}});
+      const {error} = await supabase!.auth.signInWithPassword({email:email.trim(),password:String(fields.get('password') || '')});
       if (error) throw error;
-      setStatus('Tjek din mail for et loginlink.');
-    } catch { setError('Loginlink kunne ikke sendes. Kontrollér mailadresse og adgang.'); } finally { setBusy(false); }
+      setStatus('');
+    } catch { setError('Kunne ikke logge ind. Kontrollér mailadresse og adgangskode, og prøv igen.'); } finally { setBusy(false); }
   }
   if (!today || !authReady) return <main className="welcome"><p>Henter kalender…</p></main>;
-  if (supabase && !session) return <main className="welcome"><span className="eyebrow">VORES HVERDAG</span><h1>Carl <span>&</span> Hilda</h1><p>En fælles kalender. Lidt mere overblik.</p><form onSubmit={login}><label htmlFor="email">Din mailadresse</label><input id="email" type="email" autoComplete="email" required value={email} onChange={e => setEmail(e.target.value)} /><button className="primary" disabled={busy}>{busy ? 'Sender…' : 'Send loginlink'}</button></form><p role="status">{status}</p><p role="alert">{error}</p></main>;
+  if (supabase && !session) return <main className="welcome"><span className="eyebrow">VORES HVERDAG</span><h1>Carl <span>&</span> Hilda</h1><p>En fælles kalender. Lidt mere overblik.</p>
+    <form onSubmit={login} aria-busy={busy}>
+      <label htmlFor="email">Din mailadresse</label><input id="email" name="email" type="email" autoComplete="username" autoCapitalize="none" spellCheck={false} required disabled={busy} value={email} onChange={e => setEmail(e.target.value)} />
+      <label htmlFor="password">Adgangskode</label><input id="password" name="password" type="password" autoComplete="current-password" required disabled={busy} aria-describedby="login-help" />
+      <button className="primary login-submit" disabled={busy}>{busy ? 'Logger ind…' : 'Log ind'}</button>
+    </form>
+    {error && <p className="error" role="alert">{error}</p>}
+    <p id="login-help" className="login-help">Appen husker dit login på denne enhed.</p>
+    <details className="password-help"><summary>Glemt adgangskoden?</summary><p>Få hjælp af den, der har sat appen op, til at få en ny adgangskode.</p></details>
+  </main>;
   return <>
     <header><div className="heading"><div><span className="eyebrow">FÆLLES KALENDER</span><h1>Carl <span>&</span> Hilda</h1></div>{supabase && <button className="logout" onClick={() => void supabase!.auth.signOut().then(({error}) => { if (error) setError('Kunne ikke logge ud. Prøv igen.'); })}>Log ud</button>}</div><div className="columns"><span>Carl</span><span>Hilda</span></div></header>
     <main className="calendar">
