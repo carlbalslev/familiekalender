@@ -1,0 +1,145 @@
+'use client';
+import { useEffect, useRef, useState } from 'react';
+import type { Session } from '@supabase/supabase-js';
+import { supabase } from '../lib/supabase';
+import { todayKey, addDays, blankEntry } from '../lib/dates.mjs';
+
+type Person = 'Carl' | 'Hilda';
+type Entry = { day: string; person: Person; activity: string; home_time: string | null; dinner_home: boolean; revision?: number };
+const people: Person[] = ['Carl', 'Hilda'];
+const id = (e: Entry) => `${e.day}:${e.person}`;
+const demoKey = 'carl-hilda-demo-v1';
+export default function Calendar() {
+  const [today, setToday] = useState('');
+  const [count, setCount] = useState(35);
+  const [entries, setEntries] = useState<Record<string, Entry>>({});
+  const [session, setSession] = useState<Session | null>(null);
+  const [authReady, setAuthReady] = useState(!supabase);
+  const [loaded, setLoaded] = useState(false);
+  const [status, setStatus] = useState('');
+  const [error, setError] = useState('');
+  const [email, setEmail] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [draft, setDraft] = useState<Entry | null>(null);
+  const [away, setAway] = useState(false);
+  const first = useRef<HTMLElement>(null);
+  const more = useRef<HTMLDivElement>(null);
+  const dialog = useRef<HTMLDialogElement>(null);
+  const opener = useRef<HTMLElement | null>(null);
+  const saving = useRef(false);
+
+  useEffect(() => {
+    const tick = () => setToday(todayKey()); tick();
+    const timer = setInterval(tick, 30000);
+    if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
+    return () => clearInterval(timer);
+  }, []);
+  useEffect(() => {
+    if (!supabase) { try { setEntries(JSON.parse(localStorage.getItem(demoKey) || '{}')); } catch { setError('Lokale prøvedata kunne ikke læses.'); } setLoaded(true); return; }
+    const client = supabase;
+    client.auth.getSession().then(({ data, error }) => { setSession(data.session); setAuthReady(true); if (error) setError('Login kunne ikke hentes. Prøv igen.'); });
+    const { data } = client.auth.onAuthStateChange((_event, next) => { setSession(next); setEntries({}); setLoaded(false); });
+    return () => data.subscription.unsubscribe();
+  }, []);
+  useEffect(() => {
+    if (!supabase || !session || !today) return;
+    const client = supabase;
+    let active = true, request = 0;
+    const refresh = async () => {
+      const n = ++request;
+      const membership = await client.from('family_members').select('person').eq('user_id', session.user.id).maybeSingle();
+      if (!active || n !== request) return;
+      if (membership.error || !membership.data) {
+        setEntries({}); setLoaded(false); setStatus('Ingen adgang');
+        setError('Denne konto har ikke adgang til familiekalenderen. Log ud og brug din godkendte mailadresse.');
+        return;
+      }
+      const { data, error } = await client.from('calendar_entries').select('*').gte('day', today).lte('day', addDays(today, count - 1));
+      if (!active || n !== request) return;
+      if (error) { setError('Kalenderen kunne ikke hentes. Kontrollér forbindelse og adgang.'); setStatus('Forbindelsesfejl'); return; }
+      setEntries(Object.fromEntries((data as Entry[]).map(e => [id(e), e]))); setLoaded(true);
+    };
+    void refresh();
+    const channel = client.channel('family-calendar').on('postgres_changes', {event:'*',schema:'public',table:'calendar_entries'}, () => void refresh()).subscribe(state => {
+      if (!active) return;
+      if (state === 'SUBSCRIBED') { setStatus('Synkroniseret'); void refresh(); }
+      else if (state === 'CHANNEL_ERROR' || state === 'TIMED_OUT' || state === 'CLOSED') setStatus('Forbindelse afbrudt · prøver igen');
+    });
+    const visible = () => { if (document.visibilityState === 'visible') void refresh(); };
+    const offline = () => setStatus('Offline · ændringer kan ikke gemmes');
+    window.addEventListener('online', refresh); window.addEventListener('offline', offline); document.addEventListener('visibilitychange', visible);
+    return () => { active = false; void client.removeChannel(channel); window.removeEventListener('online', refresh); window.removeEventListener('offline', offline); document.removeEventListener('visibilitychange', visible); };
+  }, [session, today, count]);
+  useEffect(() => {
+    if (!first.current || !today || !authReady || (supabase && !session)) return;
+    const observer = new IntersectionObserver(([e]) => setAway(!e.isIntersecting), {rootMargin:'-115px 0px 0px 0px'});
+    observer.observe(first.current); return () => observer.disconnect();
+  }, [today, session, authReady]);
+  useEffect(() => {
+    if (!more.current) return;
+    const observer = new IntersectionObserver(([e]) => { if (e.isIntersecting) setCount(n => n + 35); }, {rootMargin:'500px'});
+    observer.observe(more.current); return () => observer.disconnect();
+  }, [today, session, authReady]);
+  useEffect(() => { if (draft && !dialog.current?.open) dialog.current?.showModal(); }, [draft]);
+  function close() { if (saving.current) return; dialog.current?.close(); setDraft(null); setError(''); opener.current?.focus(); }
+  function edit(day: string, person: Person, target: HTMLElement) { opener.current = target; setError(''); setDraft({...entries[`${day}:${person}`] || blankEntry(day, person)}); }
+  async function save(e: React.FormEvent) {
+    e.preventDefault(); if (!draft || saving.current) return;
+    const fields = new FormData(e.currentTarget as HTMLFormElement);
+    saving.current = true; setBusy(true); setError('');
+    try {
+      const value = {...draft, activity:String(fields.get('activity') || '').trim(), home_time:String(fields.get('home_time') || '') || null, dinner_home:fields.has('dinner_home')};
+      setDraft(value);
+      if (supabase) {
+        const result = value.revision
+          ? await supabase.from('calendar_entries').update({activity:value.activity, home_time:value.home_time, dinner_home:value.dinner_home}).eq('day', value.day).eq('person', value.person).eq('revision', value.revision).select().single()
+          : await supabase.from('calendar_entries').insert(value).select().single();
+        if (result.error) throw new Error(result.error.code === '23505' || result.error.code === 'PGRST116' ? 'Dagen er ændret på en anden enhed. Luk og åbn den igen for at se den nyeste version.' : 'Kunne ikke gemme. Kontrollér internetforbindelsen og prøv igen.');
+        setEntries(old => ({...old, [id(value)]:result.data as Entry}));
+      } else {
+        const next = {...entries,[id(value)]:value}; localStorage.setItem(demoKey, JSON.stringify(next)); setEntries(next);
+      }
+      saving.current = false; close();
+    } catch (err) { setError(err instanceof Error ? err.message : 'Kunne ikke gemme.'); }
+    finally { saving.current = false; setBusy(false); }
+  }
+  async function login(e: React.FormEvent) {
+    e.preventDefault(); setBusy(true); setError('');
+    try {
+      const {error} = await supabase!.auth.signInWithOtp({email:email.trim(),options:{shouldCreateUser:true,emailRedirectTo:window.location.origin}});
+      if (error) throw error;
+      setStatus('Tjek din mail for et loginlink.');
+    } catch { setError('Loginlink kunne ikke sendes. Kontrollér mailadresse og adgang.'); } finally { setBusy(false); }
+  }
+  if (!today || !authReady) return <main className="welcome"><p>Henter kalender…</p></main>;
+  if (supabase && !session) return <main className="welcome"><span className="eyebrow">VORES HVERDAG</span><h1>Carl <span>&</span> Hilda</h1><p>En fælles kalender. Lidt mere overblik.</p><form onSubmit={login}><label htmlFor="email">Din mailadresse</label><input id="email" type="email" autoComplete="email" required value={email} onChange={e => setEmail(e.target.value)} /><button className="primary" disabled={busy}>{busy ? 'Sender…' : 'Send loginlink'}</button></form><p role="status">{status}</p><p role="alert">{error}</p></main>;
+  return <>
+    <header><div className="heading"><div><span className="eyebrow">FÆLLES KALENDER</span><h1>Carl <span>&</span> Hilda</h1></div>{supabase && <button className="logout" onClick={() => void supabase!.auth.signOut().then(({error}) => { if (error) setError('Kunne ikke logge ud. Prøv igen.'); })}>Log ud</button>}</div><div className="columns"><span>Carl</span><span>Hilda</span></div></header>
+    <main className="calendar">
+      {!supabase && <p className="notice">Prøvevisning · gemmes kun på denne enhed</p>}
+      {supabase && <p className="sync" role="status">{status || 'Forbinder…'}</p>}
+      {error && !draft && <p className="error" role="alert">{error}</p>}
+      {supabase && !loaded && <p>Henter kalender…</p>}
+      {Array.from({length:count}, (_, i) => {
+        const day = addDays(today,i); const date = new Date(day+'T12:00:00Z');
+        return <section className={`day ${i===0 ? 'today' : ''}`} key={day} ref={i===0 ? first : undefined} aria-label={day}>
+          <div className="day-title"><h2>{date.toLocaleDateString('da-DK',{weekday:'long',day:'numeric',month:'short'})}</h2>{i===0 && <span className="today-label">I DAG</span>}</div>
+          <div className="person-grid">{people.map(person => { const entry = entries[`${day}:${person}`] || blankEntry(day,person); return <div className="person" key={person}>
+            <button disabled={!loaded} className={`box activity ${entry.activity ? 'filled' : ''}`} aria-label={`${person}, ${day}: ${entry.activity || 'Tilføj aktivitet'}`} onClick={e => edit(day,person,e.currentTarget)}>{entry.activity || '—'}</button>
+            <button disabled={!loaded} className={`box dinner ${entry.dinner_home ? 'home' : 'out'}`} aria-label={`${person}, ${day}: ${entry.dinner_home ? 'Spiser hjemme' : 'Spiser ude'}. Rediger`} onClick={e => edit(day,person,e.currentTarget)}><span aria-hidden="true">{entry.dinner_home ? '●' : '○'}</span> {entry.dinner_home ? 'Spiser hjemme' : 'Spiser ude'}</button>
+          </div>; })}</div>
+        </section>;
+      })}
+      <div ref={more} aria-hidden="true" className="more" />
+    </main>
+    {away && <button className="today-button" onClick={() => window.scrollTo({top:0,behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth'})}>↑ I DAG</button>}
+    <dialog ref={dialog} aria-labelledby="edit-person" onCancel={e => {e.preventDefault();close();}} onClick={e => {if(e.target===e.currentTarget)close();}}>
+      {draft && <form onSubmit={save}><div className="edit-heading"><div><span className="eyebrow">{new Date(draft.day+'T12:00:00Z').toLocaleDateString('da-DK',{weekday:'long',day:'numeric',month:'long'})}</span><h2 id="edit-person">{draft.person}</h2></div><button type="button" className="close" aria-label="Luk" disabled={busy} onClick={close}>×</button></div>
+        <label htmlFor="activity">Aktivitet</label><input id="activity" name="activity" autoFocus maxLength={160} placeholder="Hvad er planen?" value={draft.activity} onChange={e => setDraft({...draft,activity:e.target.value})} />
+        <label htmlFor="home-time">Cirka hjemme <span className="optional">(valgfrit)</span></label><input id="home-time" name="home_time" type="time" value={draft.home_time?.slice(0,5) || ''} onChange={e => setDraft({...draft,home_time:e.target.value || null})} />
+        <label className="toggle"><span>Spiser hjemme</span><input name="dinner_home" type="checkbox" checked={draft.dinner_home} onChange={e => setDraft({...draft,dinner_home:e.target.checked})} /></label>
+        {error && <p className="error" role="alert">{error}</p>}<button className="primary" disabled={busy}>{busy ? 'Gemmer…' : 'Gem'}</button>
+      </form>}
+    </dialog>
+  </>;
+}
