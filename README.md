@@ -33,3 +33,7 @@ Supabase og Vercel skal autoriseres gennem deres almindelige forbindelsesvinduer
 Kontrollér på to separate login: ændringer begge veje, samtidige rettelser, afbrudt internet, genforbindelse og afvisning af en tredje bruger. Kontrollér også installation og login fra hjemmeskærmen på en fysisk iPhone. Disse kontroller kræver det tilsluttede projekt og kan ikke erstattes af et lokalt build.
 
 Implementationen følger [Next.js installation](https://nextjs.org/docs/app/getting-started/installation) og [Supabase Postgres Changes](https://supabase.com/docs/guides/realtime/postgres-changes).
+
+## Udseende
+
+Temaknappen skifter System → Lys → Mørk. System er standard og følger enhedens farvetema. Valget gemmes lokalt pr. enhed og synkroniseres mellem åbne faner på samme enhed. Kalenderdata og login påvirkes ikke. Knappen findes både før og efter login.

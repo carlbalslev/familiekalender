@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
+import ThemeToggle from './theme-toggle';
 import { todayKey, addDays, blankEntry } from '../lib/dates.mjs';
 
 type Person = 'Carl' | 'Hilda';
@@ -114,7 +115,7 @@ export default function Calendar() {
     } catch { setError('Kunne ikke logge ind. Kontrollér mailadresse og adgangskode, og prøv igen.'); } finally { setBusy(false); }
   }
   if (!today || !authReady) return <main className="welcome"><p>Henter kalender…</p></main>;
-  if (supabase && !session) return <main className="welcome"><span className="eyebrow">VORES HVERDAG</span><h1>Ude <span>&</span> Hjemme</h1><p>En fælles kalender. Lidt mere overblik.</p>
+  if (supabase && !session) return <main className="welcome"><div className="welcome-top"><span className="eyebrow">VORES HVERDAG</span><ThemeToggle /></div><h1>Ude <span>&</span> Hjemme</h1><p>En fælles kalender. Lidt mere overblik.</p>
     <form onSubmit={login} aria-busy={busy}>
       <label htmlFor="email">Din mailadresse</label><input id="email" name="email" type="email" autoComplete="username" autoCapitalize="none" spellCheck={false} required disabled={busy} value={email} onChange={e => setEmail(e.target.value)} />
       <label htmlFor="password">Adgangskode</label><input id="password" name="password" type="password" autoComplete="current-password" required disabled={busy} aria-describedby="login-help" />
@@ -125,7 +126,7 @@ export default function Calendar() {
     <details className="password-help"><summary>Glemt adgangskoden?</summary><p>Få hjælp af den, der har sat appen op, til at få en ny adgangskode.</p></details>
   </main>;
   return <>
-    <header><div className="heading"><div><span className="eyebrow">FÆLLES KALENDER</span><h1>Ude <span>&</span> Hjemme</h1></div>{supabase && <button className="logout" onClick={() => void supabase!.auth.signOut().then(({error}) => { if (error) setError('Kunne ikke logge ud. Prøv igen.'); })}>Log ud</button>}</div><div className="columns"><span>Carl</span><span>Hilda</span></div></header>
+    <header><div className="heading"><div><span className="eyebrow">FÆLLES KALENDER</span><h1>Ude <span>&</span> Hjemme</h1></div><div className="header-actions"><ThemeToggle />{supabase && <button className="logout" onClick={() => void supabase!.auth.signOut().then(({error}) => { if (error) setError('Kunne ikke logge ud. Prøv igen.'); })}>Log ud</button>}</div></div><div className="columns"><span>Carl</span><span>Hilda</span></div></header>
     <main className="calendar">
       {!supabase && <p className="notice">Prøvevisning · gemmes kun på denne enhed</p>}
       {supabase && <p className="sync" role="status">{status || 'Forbinder…'}</p>}
