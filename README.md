@@ -1,4 +1,4 @@
-# Carl & Hilda
+# Ude & Hjemme
 
 Minimal dansk familiekalender til iPhone. Next.js, React og Supabase. Åbner i dag (Europe/Copenhagen), indlæser flere dage ved lodret rulning og viser I DAG-knappen, når dagens gruppe forlader visningen.
 
@@ -26,7 +26,7 @@ Supabase og Vercel skal autoriseres gennem deres almindelige forbindelsesvinduer
 
 ## iPhone
 
-Åbn HTTPS-adressen i Safari → Del → Føj til hjemmeskærm. Manifest, Apple-ikon og service worker med offlinebesked medfølger. Netforbindelse kræves for fælles kalenderdata og lagring. Personlige data caches ikke af service workeren. Hjemkomsttidspunkt vises kun under redigering.
+Åbn HTTPS-adressen i Safari → Del → Føj til hjemmeskærm. Manifest, Apple-ikon og service worker med offlinebesked medfølger. Netforbindelse kræves for fælles kalenderdata og lagring. Personlige data caches ikke af service workeren. Hjemkomsttidspunkt vises i et separat kompakt felt ved siden af aktiviteten, når det er angivet. Feltet er tomt, når intet tidspunkt er angivet.
 
 ## Før ibrugtagning
 

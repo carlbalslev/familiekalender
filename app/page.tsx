@@ -114,7 +114,7 @@ export default function Calendar() {
     } catch { setError('Kunne ikke logge ind. Kontrollér mailadresse og adgangskode, og prøv igen.'); } finally { setBusy(false); }
   }
   if (!today || !authReady) return <main className="welcome"><p>Henter kalender…</p></main>;
-  if (supabase && !session) return <main className="welcome"><span className="eyebrow">VORES HVERDAG</span><h1>Carl <span>&</span> Hilda</h1><p>En fælles kalender. Lidt mere overblik.</p>
+  if (supabase && !session) return <main className="welcome"><span className="eyebrow">VORES HVERDAG</span><h1>Ude <span>&</span> Hjemme</h1><p>En fælles kalender. Lidt mere overblik.</p>
     <form onSubmit={login} aria-busy={busy}>
       <label htmlFor="email">Din mailadresse</label><input id="email" name="email" type="email" autoComplete="username" autoCapitalize="none" spellCheck={false} required disabled={busy} value={email} onChange={e => setEmail(e.target.value)} />
       <label htmlFor="password">Adgangskode</label><input id="password" name="password" type="password" autoComplete="current-password" required disabled={busy} aria-describedby="login-help" />
@@ -125,7 +125,7 @@ export default function Calendar() {
     <details className="password-help"><summary>Glemt adgangskoden?</summary><p>Få hjælp af den, der har sat appen op, til at få en ny adgangskode.</p></details>
   </main>;
   return <>
-    <header><div className="heading"><div><span className="eyebrow">FÆLLES KALENDER</span><h1>Carl <span>&</span> Hilda</h1></div>{supabase && <button className="logout" onClick={() => void supabase!.auth.signOut().then(({error}) => { if (error) setError('Kunne ikke logge ud. Prøv igen.'); })}>Log ud</button>}</div><div className="columns"><span>Carl</span><span>Hilda</span></div></header>
+    <header><div className="heading"><div><span className="eyebrow">FÆLLES KALENDER</span><h1>Ude <span>&</span> Hjemme</h1></div>{supabase && <button className="logout" onClick={() => void supabase!.auth.signOut().then(({error}) => { if (error) setError('Kunne ikke logge ud. Prøv igen.'); })}>Log ud</button>}</div><div className="columns"><span>Carl</span><span>Hilda</span></div></header>
     <main className="calendar">
       {!supabase && <p className="notice">Prøvevisning · gemmes kun på denne enhed</p>}
       {supabase && <p className="sync" role="status">{status || 'Forbinder…'}</p>}
@@ -136,7 +136,10 @@ export default function Calendar() {
         return <section className={`day ${i===0 ? 'today' : ''}`} key={day} ref={i===0 ? first : undefined} aria-label={day}>
           <div className="day-title"><h2>{date.toLocaleDateString('da-DK',{weekday:'long',day:'numeric',month:'short'})}</h2>{i===0 && <span className="today-label">I DAG</span>}</div>
           <div className="person-grid">{people.map(person => { const entry = entries[`${day}:${person}`] || blankEntry(day,person); return <div className="person" key={person}>
-            <button disabled={!loaded} className={`box activity ${entry.activity ? 'filled' : ''}`} aria-label={`${person}, ${day}: ${entry.activity || 'Tilføj aktivitet'}`} onClick={e => edit(day,person,e.currentTarget)}>{entry.activity || '—'}</button>
+            <div className="activity-row">
+              <button disabled={!loaded} className={`box activity ${entry.activity ? 'filled' : ''}`} title={entry.activity || undefined} aria-label={`${person}, ${day}: ${entry.activity || 'Tilføj aktivitet'}`} onClick={e => edit(day,person,e.currentTarget)}>{entry.activity || '—'}</button>
+              <button disabled={!loaded} className={`box home-time ${entry.home_time ? 'filled' : ''}`} aria-label={`${person}, ${day}: ${entry.home_time ? `Cirka hjemme ${entry.home_time.slice(0,5)}` : 'Tilføj hjemkomsttidspunkt'}`} onClick={e => edit(day,person,e.currentTarget)}>{entry.home_time?.slice(0,5) || ''}</button>
+            </div>
             <button disabled={!loaded} className={`box dinner ${entry.dinner_home ? 'home' : 'out'}`} aria-label={`${person}, ${day}: ${entry.dinner_home ? 'Spiser hjemme' : 'Spiser ude'}. Rediger`} onClick={e => edit(day,person,e.currentTarget)}><span aria-hidden="true">{entry.dinner_home ? '●' : '○'}</span> {entry.dinner_home ? 'Spiser hjemme' : 'Spiser ude'}</button>
           </div>; })}</div>
         </section>;
