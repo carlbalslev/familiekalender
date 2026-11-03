@@ -104,9 +104,12 @@ export default function Calendar() {
   async function save(e: React.FormEvent) {
     e.preventDefault(); if (!draft || saving.current) return;
     const fields = new FormData(e.currentTarget as HTMLFormElement);
+    const deleting = ((e.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null)?.value === 'delete';
     saving.current = true; setBusy(true); setError('');
     try {
-      const value = {...draft, activity:String(fields.get('activity') || '').trim(), home_time:String(fields.get('home_time') || '') || null, dinner_home:fields.has('dinner_home')};
+      const value: Entry = deleting
+        ? {...blankEntry(draft.day, draft.person), revision:draft.revision}
+        : {...draft, activity:String(fields.get('activity') || '').trim(), home_time:String(fields.get('home_time') || '') || null, dinner_home:fields.has('dinner_home')};
       setDraft(value);
       if (supabase) {
         const result = value.revision
@@ -184,6 +187,7 @@ export default function Calendar() {
         <label htmlFor="home-time">Cirka hjemme <span className="optional">(valgfrit)</span></label><input id="home-time" name="home_time" type="time" value={draft.home_time?.slice(0,5) || ''} onChange={e => setDraft({...draft,home_time:e.target.value || null})} />
         <label className="toggle"><span>Spiser hjemme</span><input name="dinner_home" type="checkbox" checked={draft.dinner_home} onChange={e => setDraft({...draft,dinner_home:e.target.checked})} /></label>
         {error && <p className="error" role="alert">{error}</p>}<button className="primary" disabled={busy}>{busy ? 'Gemmer…' : 'Gem'}</button>
+        {!quickReview && (entries[id(draft)]?.activity || entries[id(draft)]?.home_time || entries[id(draft)]?.dinner_home === false) && <button className="delete-event" type="submit" name="intent" value="delete" formNoValidate disabled={busy}>Slet begivenhed</button>}
       </form>}
     </dialog>
   </>;
