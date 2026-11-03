@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import ThemeToggle from './theme-toggle';
+import { parseQuickEntry } from '../lib/quick-entry.mjs';
 import { todayKey, addDays, blankEntry } from '../lib/dates.mjs';
 
 type Person = 'Carl' | 'Hilda';
@@ -22,6 +23,10 @@ export default function Calendar() {
   const [email, setEmail] = useState('');
   const [busy, setBusy] = useState(false);
   const [draft, setDraft] = useState<Entry | null>(null);
+  const [quickText, setQuickText] = useState('');
+  const [quickReview, setQuickReview] = useState(false);
+  const [quickWarning, setQuickWarning] = useState('');
+  const [myPerson, setMyPerson] = useState<Person>('Carl');
   const [away, setAway] = useState(false);
   const first = useRef<HTMLElement>(null);
   const more = useRef<HTMLDivElement>(null);
@@ -55,6 +60,7 @@ export default function Calendar() {
         setError('Denne konto har ikke adgang til familiekalenderen. Log ud og brug din godkendte mailadresse.');
         return;
       }
+      setMyPerson(membership.data.person as Person);
       const { data, error } = await client.from('calendar_entries').select('*').gte('day', today).lte('day', addDays(today, count - 1));
       if (!active || n !== request) return;
       if (error) { setError('Kalenderen kunne ikke hentes. Kontrollér forbindelse og adgang.'); setStatus('Forbindelsesfejl'); return; }
@@ -82,8 +88,19 @@ export default function Calendar() {
     observer.observe(more.current); return () => observer.disconnect();
   }, [today, session, authReady]);
   useEffect(() => { if (draft && !dialog.current?.open) dialog.current?.showModal(); }, [draft]);
-  function close() { if (saving.current) return; dialog.current?.close(); setDraft(null); setError(''); opener.current?.focus(); }
+  function close() { if (saving.current) return; dialog.current?.close(); setDraft(null); setQuickReview(false); setError(''); opener.current?.focus(); }
   function edit(day: string, person: Person, target: HTMLElement) { opener.current = target; setError(''); setDraft({...entries[`${day}:${person}`] || blankEntry(day, person)}); }
+  function previewQuick(e: React.FormEvent) {
+    e.preventDefault();
+    if (!quickText.trim() || !loaded) return;
+    const parsed = parseQuickEntry(quickText, today, myPerson);
+    opener.current = document.activeElement as HTMLElement;
+    setQuickWarning(parsed.warning); setError(''); setQuickReview(true);
+    setDraft({day:parsed.day,person:parsed.person as Person,activity:parsed.activity,home_time:parsed.home_time,dinner_home:parsed.dinner_home,revision:entries[parsed.day+':'+parsed.person]?.revision});
+  }
+  function changeQuickTarget(day: string, person: Person) {
+    if (draft) setDraft({...draft, day, person, revision:entries[day+':'+person]?.revision});
+  }
   async function save(e: React.FormEvent) {
     e.preventDefault(); if (!draft || saving.current) return;
     const fields = new FormData(e.currentTarget as HTMLFormElement);
@@ -100,6 +117,7 @@ export default function Calendar() {
       } else {
         const next = {...entries,[id(value)]:value}; localStorage.setItem(demoKey, JSON.stringify(next)); setEntries(next);
       }
+      if (quickReview) setQuickText('');
       saving.current = false; close();
     } catch (err) { setError(err instanceof Error ? err.message : 'Kunne ikke gemme.'); }
     finally { saving.current = false; setBusy(false); }
@@ -132,6 +150,12 @@ export default function Calendar() {
       {supabase && <p className="sync" role="status">{status || 'Forbinder…'}</p>}
       {error && !draft && <p className="error" role="alert">{error}</p>}
       {supabase && !loaded && <p>Henter kalender…</p>}
+      <form className="quick-entry" onSubmit={previewQuick}>
+        <label htmlFor="quick-text">Hurtig indtastning</label>
+        <input id="quick-text" name="quick-text" type="text" maxLength={300} placeholder="Padel onsdag, hjemme 19" value={quickText} onChange={e => setQuickText(e.target.value)} aria-describedby="dictation-help" enterKeyHint="go" />
+        <p id="dictation-help">Skriv eller brug mikrofonen på iPhone-tastaturet til at diktere.</p>
+        <button className="quick-preview" disabled={!loaded || !quickText.trim()}>Vis resultat →</button>
+      </form>
       {Array.from({length:count}, (_, i) => {
         const day = addDays(today,i); const date = new Date(day+'T12:00:00Z');
         return <section className={`day ${i===0 ? 'today' : ''}`} key={day} ref={i===0 ? first : undefined} aria-label={day}>
@@ -149,8 +173,14 @@ export default function Calendar() {
     </main>
     {away && <button className="today-button" onClick={() => window.scrollTo({top:0,behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth'})}>↑ I DAG</button>}
     <dialog ref={dialog} aria-labelledby="edit-person" onCancel={e => {e.preventDefault();close();}} onClick={e => {if(e.target===e.currentTarget)close();}}>
-      {draft && <form onSubmit={save}><div className="edit-heading"><div><span className="eyebrow">{new Date(draft.day+'T12:00:00Z').toLocaleDateString('da-DK',{weekday:'long',day:'numeric',month:'long'})}</span><h2 id="edit-person">{draft.person}</h2></div><button type="button" className="close" aria-label="Luk" disabled={busy} onClick={close}>×</button></div>
-        <label htmlFor="activity">Aktivitet</label><input id="activity" name="activity" autoFocus maxLength={160} placeholder="Hvad er planen?" value={draft.activity} onChange={e => setDraft({...draft,activity:e.target.value})} />
+      {draft && <form onSubmit={save}><div className="edit-heading"><div><span className="eyebrow">{new Date(draft.day+'T12:00:00Z').toLocaleDateString('da-DK',{weekday:'long',day:'numeric',month:'long'})}</span><h2 id="edit-person">{quickReview ? 'Kontrollér og gem' : draft.person}</h2></div><button type="button" className="close" aria-label="Luk" disabled={busy} onClick={close}>×</button></div>
+        {quickReview && <>
+          {quickWarning && <p className="quick-hint" role="status">{quickWarning}</p>}
+          <div className="quick-target"><div><label htmlFor="quick-person">Person</label><select id="quick-person" value={draft.person} onChange={e => changeQuickTarget(draft.day,e.target.value as Person)}>{people.map(person => <option key={person}>{person}</option>)}</select></div><div><label htmlFor="quick-day">Dato</label><input id="quick-day" type="date" required min={today} max={addDays(today,count-1)} value={draft.day} onChange={e => changeQuickTarget(e.target.value,draft.person)} /></div></div>
+          {entries[id(draft)] && <p className="quick-hint">Der er allerede en plan for {draft.person} denne dag: {entries[id(draft)].activity || 'Ingen aktivitet'}. Gem erstatter dagens oplysninger.</p>}
+          <p className="quick-hint">Ret oplysningerne nedenfor, hvis noget skal ændres. Intet gemmes før du trykker Gem.</p>
+        </>}
+        <label htmlFor="activity">Aktivitet</label><input id="activity" name="activity" required={quickReview} autoFocus maxLength={160} placeholder="Hvad er planen?" value={draft.activity} onChange={e => setDraft({...draft,activity:e.target.value})} />
         <label htmlFor="home-time">Cirka hjemme <span className="optional">(valgfrit)</span></label><input id="home-time" name="home_time" type="time" value={draft.home_time?.slice(0,5) || ''} onChange={e => setDraft({...draft,home_time:e.target.value || null})} />
         <label className="toggle"><span>Spiser hjemme</span><input name="dinner_home" type="checkbox" checked={draft.dinner_home} onChange={e => setDraft({...draft,dinner_home:e.target.checked})} /></label>
         {error && <p className="error" role="alert">{error}</p>}<button className="primary" disabled={busy}>{busy ? 'Gemmer…' : 'Gem'}</button>

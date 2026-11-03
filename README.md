@@ -37,3 +37,5 @@ Implementationen følger [Next.js installation](https://nextjs.org/docs/app/gett
 ## Udseende
 
 Temaknappen skifter System → Lys → Mørk. System er standard og følger enhedens farvetema. Valget gemmes lokalt pr. enhed og synkroniseres mellem åbne faner på samme enhed. Kalenderdata og login påvirkes ikke. Knappen findes både før og efter login.
+
+Hurtig indtastning: dansk tekst med ugedag/i morgen, hjemkomst og spiser hjemme/ude. Lokal fortolkning; altid redigerbar forhåndsvisning før Gem. iPhone-diktering bruger mikrofonen i systemtastaturet (skal være aktiveret på telefonen). Næste ugedag betyder næste forekomst, samme ugedag flyttes en uge ved 'næste'. Ukendt dato vises som i dag med advarsel.
