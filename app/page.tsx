@@ -153,12 +153,15 @@ export default function Calendar() {
       {supabase && <p className="sync" role="status">{status || 'Forbinder…'}</p>}
       {error && !draft && <p className="error" role="alert">{error}</p>}
       {supabase && !loaded && <p>Henter kalender…</p>}
-      <form className="quick-entry" onSubmit={previewQuick}>
-        <label htmlFor="quick-text">Hurtig indtastning</label>
-        <input id="quick-text" name="quick-text" type="text" maxLength={300} placeholder="Padel onsdag, hjemme 19" value={quickText} onChange={e => setQuickText(e.target.value)} aria-describedby="dictation-help" enterKeyHint="go" />
+      <details className="quick-entry">
+        <summary>Hurtig indtastning <span aria-hidden="true">⌄</span></summary>
+        <form onSubmit={previewQuick}>
+        <label htmlFor="quick-text">Din plan</label>
+        <input id="quick-text" name="quick-text" type="text" maxLength={300} value={quickText} onChange={e => setQuickText(e.target.value)} aria-describedby="dictation-help" enterKeyHint="go" />
         <p id="dictation-help">Skriv eller brug mikrofonen på iPhone-tastaturet til at diktere.</p>
         <button className="quick-preview" disabled={!loaded || !quickText.trim()}>Vis resultat →</button>
-      </form>
+        </form>
+      </details>
       {Array.from({length:count}, (_, i) => {
         const day = addDays(today,i); const date = new Date(day+'T12:00:00Z');
         return <section className={`day ${i===0 ? 'today' : ''}`} key={day} ref={i===0 ? first : undefined} aria-label={day}>
